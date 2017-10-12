@@ -7,6 +7,10 @@ library(caret)
 
 # Chargement des données avec fread, plus intelligent que read.csv
 climat <- fread("climat.201708.csv",data.table = F)
+villes <- fread("postesSynop.csv",data.table=F)
+climat <- merge(climat,villes,by="NUM_POSTE")
+row.names(climat) <- climat$Nom
+climat <- climat[,-c(1,55)]
 # Récupérer variables avec plus de 10% de NA pour les enlever
 idx_bad_col <- which(apply(climat,2,function(x){sum(is.na(x))})> (dim(climat)[1]/10))
 # elever les variables avec variance trop faible, problème pour l'acp sinon
@@ -17,7 +21,3 @@ climat_rm_na <- climat[,-c(idx_bad_col,near_zero_var,which(colnames(climat)=="FX
 idx_bad_row <-  which(apply(climat_rm_na,1,function(x){sum(is.na(x))}) > 0)
 # On retrouve 9 lignes avec au moins 1 NA, on récupère un tableau de 46 lignes sans NA
 climat_rm_na <- climat_rm_na[-idx_bad_row,]
-
-# ACP test pré-exploratoire
-res_pca <- PCA(climat_rm_na %>% select_if(is.numeric), ncp = 30, scale.unit = TRUE, graph=T)
-plot3d(res_pca$ind$coord[,1:3])
