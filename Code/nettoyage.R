@@ -7,16 +7,14 @@ library(rgl)
 library(caret)
 
 # Chargement des donn?es avec fread, plus intelligent que read.csv
-climat <- fread("DonnÃ©es/climat.201708.csv",data.table = F)
-villes <- fread("DonnÃ©es/postesSynop.csv",data.table=F)
+climat <- fread("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo/DonnÃ©es/climat.201708.csv",data.table = F)
+villes <- fread("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo/DonnÃ©es/postesSynop.csv",data.table=F)
 climat <- merge(climat,villes,by="NUM_POSTE")
 row.names(climat) <- climat$Nom
 climat <- climat[,-c(1,55)]
-<<<<<<< HEAD
-# R?cup?rer variables avec plus de 10% de NA pour les enlever
-=======
 
-# design de la matrice de corrélation
+
+# design de la matrice de corr?lation
 cormat <- round(cor(climat %>% select_if(is.numeric)),2)
 melted_cormat <- melt(cormat)
 # Get lower triangle of the correlation matrix
@@ -39,8 +37,8 @@ ggplot(data = melted_cormat, aes(Var2, Var1, fill = value)) +
   theme(axis.text.x = element_text(angle = 45,vjust = 1,size = 10,hjust = 1)) +
   coord_fixed()
 
-# Récupérer variables avec plus de 10% de NA pour les enlever
->>>>>>> e1b7011e476ccdc94466011170bd0e38d4d0406d
+# R?cup?rer variables avec plus de 10% de NA pour les enlever
+
 idx_bad_col <- which(apply(climat,2,function(x){sum(is.na(x))})> (dim(climat)[1]/10))
 # elever les variables avec variance trop faible, probl?me pour l'acp sinon
 near_zero_var <- nzv(climat, freqCut = 90/10)
@@ -50,3 +48,4 @@ climat_rm_na <- climat[,-c(idx_bad_col,near_zero_var,which(colnames(climat)=="FX
 idx_bad_row <-  which(apply(climat_rm_na,1,function(x){sum(is.na(x))}) > 0)
 # On retrouve 9 lignes avec au moins 1 NA, on r?cup?re un tableau de 46 lignes sans NA
 climat_rm_na <- climat_rm_na[-idx_bad_row,]
+
