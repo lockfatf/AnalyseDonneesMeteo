@@ -6,9 +6,11 @@ library(factoextra)
 library(rgl)
 library(caret)
 
+#pour flo : setwd("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo")
+
 # Chargement des donn?es avec fread, plus intelligent que read.csv
-climat <- fread("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo/Données/climat.201708.csv",data.table = F)
-villes <- fread("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo/Données/postesSynop.csv",data.table=F)
+climat <- fread("Données/climat.201708.csv",data.table = F)
+villes <- fread("Données/postesSynop.csv",data.table=F)
 climat <- merge(climat,villes,by="NUM_POSTE")
 row.names(climat) <- climat$Nom
 climat <- climat[,-c(1,55)]
