@@ -1,5 +1,6 @@
 library(data.table)
 library(tidyverse)
+library(reshape2)
 library(FactoMineR)
 library(factoextra)
 library(rgl)
@@ -11,7 +12,35 @@ villes <- fread("DonnÃ©es/postesSynop.csv",data.table=F)
 climat <- merge(climat,villes,by="NUM_POSTE")
 row.names(climat) <- climat$Nom
 climat <- climat[,-c(1,55)]
+<<<<<<< HEAD
 # R?cup?rer variables avec plus de 10% de NA pour les enlever
+=======
+
+# design de la matrice de corrélation
+cormat <- round(cor(climat %>% select_if(is.numeric)),2)
+melted_cormat <- melt(cormat)
+# Get lower triangle of the correlation matrix
+get_lower_tri<-function(cormat){
+  cormat[upper.tri(cormat)] <- NA
+  return(cormat)
+}
+# Get upper triangle of the correlation matrix
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+
+lower_tri <- get_lower_tri(cormat)
+melted_cormat <- melt(lower_tri, na.rm = TRUE)
+library(ggplot2)
+ggplot(data = melted_cormat, aes(Var2, Var1, fill = value)) +
+  geom_tile(color = "white")+scale_fill_gradient2(low="blue",high="red",mid="white",midpoint=0,limit=c(-1,1),space="Lab", name="Pearson\nCorrelation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45,vjust = 1,size = 10,hjust = 1)) +
+  coord_fixed()
+
+# Récupérer variables avec plus de 10% de NA pour les enlever
+>>>>>>> e1b7011e476ccdc94466011170bd0e38d4d0406d
 idx_bad_col <- which(apply(climat,2,function(x){sum(is.na(x))})> (dim(climat)[1]/10))
 # elever les variables avec variance trop faible, probl?me pour l'acp sinon
 near_zero_var <- nzv(climat, freqCut = 90/10)
