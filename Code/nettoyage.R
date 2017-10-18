@@ -51,3 +51,10 @@ idx_bad_row <-  which(apply(climat_rm_na,1,function(x){sum(is.na(x))}) > 0)
 # On retrouve 9 lignes avec au moins 1 NA, on r?cup?re un tableau de 46 lignes sans NA
 climat_rm_na <- climat_rm_na[-idx_bad_row,]
 
+#remplace NA par 0 dans cormat
+cormat[which(is.na(cormat[]))] <- 0
+
+#fonction qui indique quel variables enlever
+findCorrelation(cormat, cutoff = 0.6, verbose = FALSE, names = FALSE,
+                exact = FALSE)
+
