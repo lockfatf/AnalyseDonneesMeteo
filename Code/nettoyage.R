@@ -55,6 +55,6 @@ climat_rm_na <- climat_rm_na[-idx_bad_row,]
 cormat[which(is.na(cormat[]))] <- 0
 
 #fonction qui indique quel variables enlever
-findCorrelation(cormat, cutoff = 0.6, verbose = FALSE, names = FALSE,
+vire_var = findCorrelation(cormat, cutoff = 0.6, verbose = FALSE, names = FALSE,
                 exact = FALSE)
 
