@@ -1,7 +1,7 @@
 library(caret)
 library(pls)
 
-idx_test <- c(7110,4149,7222,7481,7535,7591,7630,7747,7790)
+idx_test <- c(7110,7149,7222,7481,7535,7591,7630,7747,7790)
 
 ### PCR ###
 
@@ -32,7 +32,7 @@ RMSE(pred,test_proj$FXAB)
 test <- preproc[preproc$NUM_POSTE %in% idx_test,]
 training <- preproc[-(preproc$NUM_POSTE %in% idx_test),]
 
-control <- trainControl(method="repeatedcv", number=10, repeats=3)
+control <- trainControl(method="repeatedcv", number=10, repeats=10)
 
 mtry <- sqrt(ncol(training))
 tunegrid <- expand.grid(.mtry=mtry)
