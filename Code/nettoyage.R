@@ -5,18 +5,19 @@ library(FactoMineR)
 library(factoextra)
 library(rgl)
 library(caret)
+library(missMDA)
 
 #pour flo : setwd("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo")
 
-# Chargement des donn?es avec fread, plus intelligent que read.csv
-climat <- fread("DonnÃ©es/climat.201708.csv",data.table = F)
-villes <- fread("DonnÃ©es/postesSynop.csv",data.table=F)
+# Chargement des donnees avec fread, plus intelligent que read.csv
+climat <- fread("Données/climat.201708.csv",data.table = F)
+villes <- fread("Données/postesSynop.csv",data.table=F)
 climat <- merge(climat,villes,by="NUM_POSTE")
 row.names(climat) <- climat$Nom
 climat <- climat[,-c(1,55)]
 
 
-# design de la matrice de corr?lation
+# design de la matrice de correlation
 cormat <- round(cor(climat %>% select_if(is.numeric)),2)
 melted_cormat <- melt(cormat)
 # Get lower triangle of the correlation matrix
@@ -39,22 +40,20 @@ ggplot(data = melted_cormat, aes(Var2, Var1, fill = value)) +
   theme(axis.text.x = element_text(angle = 45,vjust = 1,size = 10,hjust = 1)) +
   coord_fixed()
 
-# R?cup?rer variables avec plus de 10% de NA pour les enlever
-
+# Recuperer variables avec plus de 10% de NA pour les enlever
 idx_bad_col <- which(apply(climat,2,function(x){sum(is.na(x))})> (dim(climat)[1]/10))
-# elever les variables avec variance trop faible, probl?me pour l'acp sinon
+# et les variables avec variance trop faible, probleme pour l'acp sinon
 near_zero_var <- nzv(climat, freqCut = 90/10)
-# et les enlever ainsi que FXAB qui doit ?tre mise de c?t?
-climat_rm_na <- climat[,-c(idx_bad_col,near_zero_var,which(colnames(climat)=="FXAB"))]
-# Virer lignes avec au moins 1 NA
-idx_bad_row <-  which(apply(climat_rm_na,1,function(x){sum(is.na(x))}) > 0)
-# On retrouve 9 lignes avec au moins 1 NA, on r?cup?re un tableau de 46 lignes sans NA
-climat_rm_na <- climat_rm_na[-idx_bad_row,]
+# et les enlever
+climat_rm_na <- climat[,-c(idx_bad_col,near_zero_var)]
 
 #remplace NA par 0 dans cormat
 cormat[which(is.na(cormat[]))] <- 0
 
 #fonction qui indique quel variables enlever
-vire_var = findCorrelation(cormat, cutoff = 0.6, verbose = FALSE, names = FALSE,
-                exact = FALSE)
+vire_var = findCorrelation(cormat, cutoff = 0.6, verbose = FALSE, names = FALSE, exact = FALSE)
 
+climat_rm_na_vire = climat_rm_na[,-vire_var]
+preproc <- climat_rm_na_vire %>% select_if(is.numeric)
+nb <- estim_ncpPCA(preproc,scale=T)
+preproc_impute <- imputePCA(preproc,ncp=nb$ncp,scale=T)
