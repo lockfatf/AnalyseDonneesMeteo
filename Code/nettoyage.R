@@ -10,11 +10,11 @@ library(missMDA)
 #pour flo : setwd("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo")
 
 # Chargement des donnees avec fread, plus intelligent que read.csv
-climat <- fread("Données/climat.201708.csv",data.table = F)
-villes <- fread("Données/postesSynop.csv",data.table=F)
+climat <- fread("DonnÃ©es/climat.201708.csv",data.table = F)
+villes <- fread("DonnÃ©es/postesSynop.csv",data.table=F)
 climat <- merge(climat,villes,by="NUM_POSTE")
 row.names(climat) <- climat$Nom
-climat <- climat[,-c(1,55)]
+climat <- climat[,-c(55)]
 
 
 # design de la matrice de correlation
