@@ -1,0 +1,29 @@
+---
+title: "Rapport de Projet"
+subtitle: "par Kévin Des Courières, Axel Kuehn et Florian Lock-Fat "
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Présentation
+
+Voici notre rapport de projet sur les données météo. Nous avons travaillé à trois sur ce projet. Vous pouvez accèder aux codes sources du projet en R ainsi que le document RMarkdown et même ce rapport en PDF à l'adresse suivante : <https://github.com/lockfatf/AnalyseDonneesMeteo>.
+
+
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
