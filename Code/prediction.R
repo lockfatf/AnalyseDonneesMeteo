@@ -2,10 +2,11 @@ library(caret)
 library(pls)
 library(reshape2)
 
+#pour flo : setwd("/users/florianlockfat/Documents/GitHub/AnalyseDonneesMeteo")
 
 # Chargement des donnees avec fread, plus intelligent que read.csv
-climat <- fread("Données/climat.201708.csv",data.table = F)
-villes <- fread("Données/postesSynop.csv",data.table=F)
+climat <- fread("Donn?es/climat.201708.csv",data.table = F)
+villes <- fread("Donn?es/postesSynop.csv",data.table=F)
 climat <- merge(climat,villes,by="NUM_POSTE",all.x = T)
 climat$Nom[is.na(climat$Nom)] <- "Nom Inconnu"
 row.names(climat) <- climat$Nom
