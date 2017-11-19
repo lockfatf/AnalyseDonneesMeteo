@@ -18,10 +18,10 @@ Voici notre rapport de projet sur les données météo. Nous avons travaillé à
 
 ```{r library}
 pacman::p_load(data.table,tidyverse,reshape2,FactoMineR,doParallel,Matrix,
-               factoextra,rgl,caret,missMDA,dplyr,ggplot2,pls,glmnet,cowplot)
+               factoextra,rgl,caret,missMDA,dplyr,ggplot2,pls,glmnet,cowplot,ggrepel)
 ```
 
-## I.2. Imporation des données :
+## I.2. Importation des données :
 
 Commencons par importer les jeux de données mis à notre disposition.
 
@@ -74,7 +74,7 @@ dim(climat_rm_na)
 
 Nous obtenons un jeu de données nettoyé avec 58 observations et 25 variables.
 
-## I.4. Matrice de corélation : 
+## I.4. Matrice de corrélation : 
 
 Avec ce dernier jeu de données obtenu, nous allons regarder la matrice de corrélation :
 
@@ -125,22 +125,22 @@ La matrice de corrélation révèle de nombreuses corrélations entre nos variab
 idx_corVar = findCorrelation(cormat, cutoff = 0.5, verbose = FALSE, names = FALSE, exact = T)
 ```
 
-On cherche maintenant à imputer les valeurs manquantes de notre jeu de données. Pour cela nous avons décidé d'utiliser le package `missMDA` qui a été spécifiquement implémenté pour imputer les données manquante en vue d'effectuer une analyse par ACP. Il nous faut tout d'abord estimer le nombre de composantes requises par la fonction `imputePCA` qui est la fonction permettan d'imputer ensuite les données par ACP itérative, avec le nombre de composantes optimal identifié par la fonction `estim_ncpPCA`.
+On cherche maintenant à imputer les valeurs manquantes de notre jeu de données. Pour cela nous avons décidé d'utiliser le package `missMDA` qui a été spécifiquement implémenté pour imputer les données manquante en vue d'effectuer une analyse par ACP. Il nous faut tout d'abord estimer le nombre de composantes requises par la fonction `imputePCA` qui est la fonction permettant d'imputer ensuite les données par ACP itérative, avec le nombre de composantes optimal identifié par la fonction `estim_ncpPCA`.
 
 ```{r data imputation}
 # Elimination des variables annotées
 preproc <- climat_rm_na[,-idx_corVar]
 # Estimation du nombre de composantes requises
 set.seed(123)
-nb <- estim_ncpPCA(preproc,scale=T)
+nb <- estim_ncpPCA(preproc,scale=T,method.cv = "Kfold")
 preproc_impute <- imputePCA(preproc,ncp=nb$ncp,scale=T)$completeObs
 ```
 
 # II. Exploration :
 
-## II.1. Premier ACP :
+## II.1. Première ACP :
 
-Dans un premier temps, nous effectuons une PCA exploratoire afin de découvrir les éventuels leviers que pourraient présenter certains individus et/ou variables.
+Dans un premier temps, nous effectuons une ACP exploratoire afin de découvrir les éventuels leviers que pourraient présenter certains individus et/ou variables.
 
 ```{r}
 # 1ère PCA
@@ -149,48 +149,50 @@ res_pca1 <- PCA(preproc_impute, ncp = dim(preproc_impute)[2], scale.unit = TRUE,
 fviz_eig(res_pca1, addlabels = TRUE) + ggtitle("") + xlab("Composantes principales") + ylab("% d'inertie")
 ```
 
-Nous récupérons 90% de la variance à partir de 7 composantes.
+Nous récupérons 90% de la variance à partir de 6 composantes.
 
 ```{r fig.height=4}
 # Diagramme des contributions des individus
-ind_plot = fviz_contrib(res_pca1,axes=c(1:7),choice="ind", top = 20) + ggtitle("") + ylab("% Contribution") + coord_fixed()
+fviz_pca_biplot(res_pca2,axes=c(1,2),repel = T)
+ind_plot = fviz_contrib(res_pca1,axes=c(1:6),choice="ind", top = 20) + ggtitle("") + ylab("% Contribution") + coord_fixed()
 # Diagramme des contributions des variables
-var_plot = fviz_contrib(res_pca1,axes=c(1:7),choice="var") + ggtitle("") + ylab("% Contribution") + coord_fixed()
+var_plot = fviz_contrib(res_pca1,axes=c(1:6),choice="var") + ggtitle("") + ylab("% Contribution") + coord_fixed()
 # Affichage des 2 diagrammes :
 plot_grid(ind_plot, var_plot, labels=c("Individus", "Variables"), ncol = 2, nrow = 1, align = 'h')
 ```
 
-Sur ces 7 composante nous décidons d'ignorer les individus contribuant à plus de 5% pour la totalité de ces axes. Rien d'étonant, les stations qui contribuent fortement sont des stations hors France Métropolitaine, exemple avec Dumont d'Urville qui est une base en Antarctique.
+Sur ces 7 composantes nous décidons d'ignorer les individus contribuant à plus de 5% pour la totalité de ces axes. Rien d'étonant, les stations qui contribuent fortement sont des stations hors France Métropolitaine, exemple avec Dumont d'Urville qui est une base en Antarctique.
 
 ```{r High_Contrib}
 # Marquage des individus contribuant fortement
-contrib_ind <-fviz_contrib(res_pca1,axes=c(1:7),choice="ind")
+contrib_ind <-fviz_contrib(res_pca1,axes=c(1:6),choice="ind")
 ind_high_contrib <- rownames(contrib_ind$data[contrib_ind$data$contrib>5,])
 ```
 
-Nous effectuons une nouvelle ACP en enlevant les indidus ciblés.
-
 ## II.2. Deuxième ACP :
+
+Nous effectuons une nouvelle ACP en enlevant les individus ciblés. Ils ne participent pas à la construction des axes mais sont présents en bleu.
 
 ```{r Explo2}
 # 2e ACP moins les individus à forte contribution
 res_pca2 <- PCA(preproc_impute, ncp = dim(preproc_impute)[2], scale.unit = TRUE, graph=F,ind.sup=which(rownames(preproc_impute) %in% ind_high_contrib))
-#fviz_pca_biplot(res_pca2,axes=c(1,2),repel = T)
+fviz_pca_biplot(res_pca2,axes=c(1,2),repel = T)
+fviz_pca_biplot(res_pca2,axes=c(1,3),repel = T)
 fviz_eig(res_pca2, addlabels = TRUE) + ggtitle("") + ylab("% d'inertie") + xlab("Composantes principales")
 ```
 
-Nous obtenons le même résultat que la première ACP, c'est à dire, nous couvrons 90% à partir de la 7e composantes. Dans l'ensemble cela reste stable.
+Nous obtenons le même résultat que la première ACP, c'est à dire que nous couvrons 90% de la variance à partir de la 6e composante.
 
 ```{r}
 # Diagramme des contributions des individus
-ind_plot2 = fviz_contrib(res_pca2,axes=c(1:7),choice="ind", top = 20) + ggtitle("") + ylab("% Contribution")
+ind_plot2 = fviz_contrib(res_pca2,axes=c(1:6),choice="ind", top = 20) + ggtitle("") + ylab("% Contribution")
 # Diagramme des contributions des variables
-var_plot2 = fviz_contrib(res_pca2,axes=c(1:7),choice="var") + ggtitle("") + ylab("% Contribution")
+var_plot2 = fviz_contrib(res_pca2,axes=c(1:6),choice="var") + ggtitle("") + ylab("% Contribution")
 # Affichage des 2 diagrammes :
 plot_grid(ind_plot2, var_plot2, labels=c("Individus", "Variables"), ncol = 2, nrow = 1, align = 'h')
 ```
 
-Nous décidons de ne plus éliminer d'individus.
+Dans l'ensemble cela reste stable et nous décidons de ne plus éliminer d'individus, car même si certaines villes contribuents fortement à la construction des axes, ces mêmes villes sont généralement localisées de manière particulière. C'est une caractéristique que l'on ne souhaite pas éliminer mais, au contraire, que l'on souhaite capturer via notre ACP.
 
 ```{r HCPC Explo2}
 # HCPC pour obtenir clusters à partir la PCA
@@ -200,7 +202,7 @@ fviz_dend(res.hcpc,
           palette = "jco",               # Palette de couleur ?ggpubr::ggpar
           rect = TRUE, rect_fill = TRUE, # Rectangle autour des groupes
           rect_border = "jco",           # Couleur du rectangle
-          labels_track_height = 0.8      # Augment l'espace pour le texte
+          labels_track_height = 4      # Augment l'espace pour le texte
 )
 fviz_cluster(res.hcpc,
              repel = TRUE,            # Evite le chevauchement des textes
@@ -211,9 +213,22 @@ fviz_cluster(res.hcpc,
 )
 ```
 
-On observe 2 clusters principaux, un Centre-Nord France et un Sud France. Les individus contribuant fortement se retrouvent dans des clusters à part, notamment le cluster Océan Indien (Réunion + Mayotte).
+Bien que certaines villes contribuent encore fortement à la construction des axes 1 à 6, on observe sur les diagrammes ci-dessus 2 clusters principaux: un Centre-Nord France et un Sud France. Les individus contribuant fortement se retrouvent dans des clusters à part, notamment le cluster Océan Indien (Réunion + Mayotte) et un cluster composé de villes "montagnardes" (Embrun et Le Puy-Loudes), possédant une altitude relativement élevé par rapport aux autres villes présentes.
+
+En ce qui concerne les variables, elles sont relativement bien représentées sur le cercle des corrélations et donc interprétables.
+
+```{r}
+fviz_pca_var(res_pca2,axes=c(1,2),repel=T)
+fviz_pca_var(res_pca2,axes=c(1,3),repel=T)
+```
+
+On observe que les variables portant sur la température (maximale, minimale, moyenne) sont globalement et intuitivement opposées à la pression atmosphérique, la longitude, et la force du vent, ainsi que l'altitude et l'écart-type des températures moyennes dans une moindre mesure. A l'inverse, les variables portant sur la pluie semblent être déconnectées des autres variables.
+
+En conslusion, l'ACP effectuée permet de discriminer intelligemment les individus (villes) incluent dans cette analyse, ce qui est le but souhaité lors d'une telle analyse exploratoire.
 
 # III. Prédiction par PCR, PLSR et RandomForest
+
+## Nettoyage et préparation des données
 
 Tout d'abord, il conviendra de suivre le même cheminement que pour l'analyse exploratoire, toutefois en se restreignant au jeu d'apprentissage
 .
@@ -233,6 +248,8 @@ training <- climat[-which(climat$NUM_POSTE %in% idx_test),-which(colnames(climat
 test <- climat[climat$NUM_POSTE %in% idx_test,-which(colnames(climat) %in% c("NUM_POSTE","FXAB"))]
 ```
 
+Pour imputer les valeurs manquantes dans le jeu d'apprentissage, nous avons tout d'abord créé un modèle d'imputation sur ce jeu. Nous avons choisi le méthode `bagImpute` du package `caret` car il a été montré sa supériorité par rapport à d'autres méthodes d'imputation comme les KNN ou par la médiane. La fonction `preProcess()` permet de créer ce modèle d'imputation simplement, ainsi que d'éliminer les variables à faible variance. Une fois ce modèle de preprocessing obtenu, nous l'avons appliqué au jeu de test afin de l'imputer et de le formatter sur la base du jeu d'apprentissage.
+
 ```{r clean prediction}
 # Sélection des variables numérique
 training <- training %>% select_if(is.numeric)
@@ -246,6 +263,8 @@ training <- predict(training_bagImpute,training)
 test <- test[,which(colnames(test) %in% colnames(training))]
 test <- predict(training_bagImpute,test)
 ```
+
+Comme pour l'analyse exploratoire, nous effectuons une 1ère ACP sur le jeu d'apprentissage et récupérons les villes contribuant fortement. Cependant, nous avons avons d'une part augmenté le nombre de composantes considérées et d'autre part fixé un seuil de contribution plus faible, afin d'obtenir un groupe d'individus plus homogène.
 
 ```{r PCR, ACP explo}
 # On effectue une 1ère ACP sur notre jeu d'apprentissage nettoyé
@@ -273,7 +292,9 @@ fviz_dend(res_hcpc,
 )
 ```
 
-L'ACP effectuée sur notre jeu de données d'apprentissage permet d'observer 3 clusters distincts. Un cluster Nord de la France, un cluster Sud de la France et un cluster Océan Indien.
+La 2e ACP effectuée sur notre jeu de données d'apprentissage permet d'observer 3 clusters distincts. Un cluster Nord de la France, un cluster Sud de la France et un cluster Océan Indien. 
+
+Dans un deuxième temps, il nous faut transformer les données de test en les standardisant puis en les projetant sur les axes obtenues par ACP sur le jeu d'entraînement. Le jeu de test est standardisé à l'aide des statistiques du jeu d'apprentissage, puis projeté sur les axes de ce même jeu d'apprentissage en récupérant la matrice de décomposition des valeurs singulières (SVD).
 
 ```{r Projection sur les axes ACP}
 # Récupération de la matrice des composantes du jeu d'apprentissage
@@ -289,6 +310,10 @@ test_proj$FXAB <- climat$FXAB[which(rownames(climat) %in% rownames(test_proj))]
 colnames(test_proj) <- colnames(train_proj)
 ```
 
+## Construction et évaluation d'un modèle PCR
+
+Ensuite, nous avons construit un modèle de régression linéaire sur les composantes (PCR) grâce à la fonction `pcr` du package `pls`. Il s'agit de construire un modèle permettant de prédire la force maximale du vent en m/s du mois observé (Août).
+
 ```{r Création du modèle PCR}
 set.seed(123)
 pcr_fit <- pcr(FXAB ~ ., data = train_proj, scale = F, validation = "CV")
@@ -303,16 +328,24 @@ set.seed(123)
 pcr_fit <- pcr(FXAB ~ ., data = train_proj,ncomp=ncomp.min, scale = F, validation = "CV")
 ```
 
+Nous avons récupéré par validation croisée le nombre optimal de composantes sur lesquelles effectuer la régression. Il est maintenant possible d'appliquer notre modèle aux données de test, et avec le nombre de composantes identifié, pour en prédire la force maximale du vent.
+
 ```{r Prédiction PCR}
 pred_pcr <- predict(pcr_fit, ncp = ncomp.min, newdata = test_proj) %>% as.data.frame %>% pull()
 rmse_pcr <- RMSE(pred_pcr,test_proj$FXAB)
-as.data.frame(pred_pcr) %>% cbind(., measured = test_proj$FXAB) %>%
+as.data.frame(pred_pcr) %>% cbind(., measured = test_proj$FXAB, villes=rownames(test_proj)) %>%
   ggplot(mapping = aes(x = measured, y = pred_pcr)) +
     geom_point() +
     geom_abline(mapping = aes(slope=1, intercept=1), color='red', linetype=2) +
     theme_bw() +
-    labs(title = "Valeurs prédites en fonctions des valeurs observées (PCR)", subtitle = paste("RMSE:",round(rmse_pcr,2)),x="Observations",y="Prédictions")
+    labs(title = "Valeurs prédites en fonctions des valeurs observées (PCR)", subtitle = paste("RMSE:",round(rmse_pcr,2)),x="Observations",y="Prédictions")+geom_text_repel(aes(label=villes))
 ```
+
+Nous avons obtenus une RMSE de 1.4 m/s, sur une échelle des valeurs observées s'étendant d'environ 12 m/s à 22 m/s.
+
+## Construction et évaluation d'un modèle PLSR
+
+Nous avons ensuite construit un modèle à l'aide de la méthode PLSR en suivant les mêmes étapes que pour la PCR puisque le package `pls` propose de passer simplement d'un méthode à l'autre en appelant identiquement la fonction `pcr()` ou `plsr()`.
 
 ```{r Création du modèle PLSR}
 set.seed(123)
@@ -331,13 +364,19 @@ plsr_fit <- plsr(FXAB ~ ., data = train_proj,ncomp=ncomp.min, scale = F, validat
 ```{r Prédiction PLSR}
 pred_plsr <- predict(plsr_fit, ncp = ncomp.min, newdata = test_proj) %>% as.data.frame %>% pull()
 rmse_plsr <- RMSE(pred_plsr,test_proj$FXAB)
-as.data.frame(pred_plsr) %>% cbind(., measured = test_proj$FXAB) %>%
+as.data.frame(pred_plsr) %>% cbind(., measured = test_proj$FXAB,villes=rownames(test_proj)) %>%
   ggplot(mapping = aes(x = measured, y = pred_plsr)) +
     geom_point() +
     geom_abline(mapping = aes(slope=1, intercept=1), color='red', linetype=2) +
     theme_bw() +
-    labs(title = "Valeurs prédites en fonctions des valeurs observées (PLSR)", subtitle = paste("RMSE:",round(rmse_plsr,2)),x="Observations",y="Prédictions")
+    labs(title = "Valeurs prédites en fonctions des valeurs observées (PLSR)", subtitle = paste("RMSE:",round(rmse_plsr,2)),x="Observations",y="Prédictions")+geom_text_repel(aes(label=villes))
 ```
+
+Ce deuxième modèle obtenu par PLSR performe légèrement moins bien que le modèle obtenu par PCR avec une RMSE de 1.91 m/s. En particulier, la ville d'Embrun et sa localisation particulière semblent avoir posé problème à ce modèle.
+
+## Bonus 
+
+Nous avons cherché à obtenir d'autres prédictions à l'aide de modèles simplement accessibles via le package `caret` et couramment utilisé en data science, tels que le RandomForest, le SVM et glmnet.
 
 ```{r randomForest sur Jeu de départ}
 training_rf <- training[-which(rownames(training) %in% high_contrib_names),]
@@ -354,5 +393,11 @@ RMSE(predict(mod_svm,test_rf),test_rf$FXAB)
 RMSE(predict(mod_glmnet,test_rf),test_rf$FXAB)
 ```
 
+Ces algorithmes fournissent de bonnes prédictions de manière relativement simple, puisqu'il n'a pas été nécessaire de transformer les données par ACP et peuvent donc se présenter comme alternatives pertinentes pour faire de la prédiction sur ce genre de donées, en particulier la méthode RandomForest.
 
+## Conclusion
+
+La méthode PCR de régression linéaire sur les composantes s'est montré la plus efficace dans la prédiction de la force maximale du vent en Août 2017, pour les villes présentes dans le jeu de test. Cependant, les résultats obtenus sont à tempérer au vu de la taille des jeux d'apprentissage et de test.
+
+Nous avons notamment vu que la façon dont nous préparons le jeu d'apprentissage peut avoir des répercutions considérables sur la prédiction. Ainsi, il serait nécessaire d'obtenir plus de données afin de valider le cheminement et les choix que nous avons faits, tels que le filtrage des variables sur la base du pourcentage de valeurs manquantes ou des corrélations, l'adéquation de la méthode d'imputation, ou encore le seuil à fixer pour supprimer les individus contribuant fortement à la construction des axes ACP.
 
