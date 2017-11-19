@@ -106,7 +106,8 @@ On cherche maintenant à imputer les valeurs manquantes de notre jeu de données
 # Elimination des variables annotées
 preproc <- climat_rm_na[,-idx_corVar]
 # Estimation du nombre de
-nb <- estim_ncpPCA(preproc,scale=T)
+set.seed(123)
+nb <- estim_ncpPCA(preproc,scale=T,method.cv="Kfold")
 preproc_impute <- imputePCA(preproc,ncp=nb$ncp,scale=T)$completeObs
 ```
 
@@ -120,17 +121,17 @@ res_pca1 <- PCA(preproc_impute, ncp = dim(preproc_impute)[2], scale.unit = TRUE,
 #Affichage des valeurs propres pour sélection du nombre de composantes
 res_pca1$eig
 # Diagramme des contributions des individus
-fviz_contrib(res_pca_vire,axes=c(1:7),choice="ind")
+fviz_contrib(res_pca1,axes=c(1:7),choice="ind")
 # Diagramme des contributions des variables
-fviz_contrib(res_pca_vire,axes=c(1:7),choice="var")
-contrib_ind <-fviz_contrib(res_pca_vire,axes=c(1:7),choice="ind")
+fviz_contrib(res_pca1,axes=c(1:7),choice="var")
+contrib_ind <-fviz_contrib(res_pca1,axes=c(1:7),choice="ind")
 ```
 
-Nous récupérons 90% de la variance à partir de 7 composantes. Sur ces 7 composante nous décidons d'ignorer l'individu contribuant à plus de 10% pour la totalite des ces axes (Dumont d'Urville).
+Nous récupérons 95% de la variance à partir de 7 composantes. Sur ces 7 composante nous décidons d'ignorer les individus contribuant à plus de 5% pour la totalite des ces axes.
 
 ```{r Explo2}
 # Marquage des individus contribuant fortement
-ind_high_contrib <- rownames(contrib_ind$data[contrib_ind$data$contrib>10,])
+ind_high_contrib <- rownames(contrib_ind$data[contrib_ind$data$contrib>=5,])
 # 2e ACP moins les individus à forte contribution
 res_pca2 <- PCA(preproc_impute, ncp = dim(preproc_impute)[2], scale.unit = TRUE, graph=F,ind.sup=which(rownames(preproc_impute) %in% ind_high_contrib))
 fviz_pca_biplot(res_pca2,axes=c(1,2),repel = T)
@@ -153,6 +154,8 @@ fviz_cluster(res.hcpc,
              main = "Factor map"
 )
 ```
+
+On observe 2 clusters principaux, un Centre-Nord France et un Sud France. Les individus contribuant fortement se retrouvent dans des clusters à part, notamment le cluster Océan Indien (Réunion + Mayotte).
 
 ### Prédiction par PCR, PLSR et RandomForest
 
