@@ -1,0 +1,299 @@
+---
+title: "Rapport de Projet"
+subtitle: "par Kévin Des Courières, Axel Kuehn et Florian Lock-Fat "
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Présentation du projet :
+
+Voici notre rapport de projet sur les données météo. Nous avons travaillé à trois sur ce projet. Vous pouvez accèder aux codes sources du projet en R ainsi que le document RMarkdown et même ce rapport en PDF à l'adresse suivante : <https://github.com/lockfatf/AnalyseDonneesMeteo>.
+
+# Préparations des données : 
+
+## Importation des librairies nécéssaires :
+
+```{r library}
+pacman::p_load(data.table,tidyverse,reshape2,FactoMineR,
+               factoextra,rgl,caret,missMDA,dplyr,ggplot2,pls)
+```
+
+## Imporation des données :
+
+```{r data load}
+# Chargement des donnees avec fread, plus intelligent que read.csv
+# Climat
+climat <- fread("Données/climat.201708.csv",data.table = F)
+# Villes
+villes <- fread("Données/postesSynop.csv",data.table=F)
+# Merge des 2 jeux de données
+climat <- merge(climat,villes,by="NUM_POSTE",all.x = T)
+# Une ville avec aucune correspondance
+climat$Nom[is.na(climat$Nom)] <- "Nom Inconnu"
+# Renomage de l'indice par la variable "Nom"" 
+row.names(climat) <- climat$Nom
+# Elimination des variables "Nom" et "NUM_POSTE" 
+climat <- climat[,-c(1,55)]
+# Dimension de notre jeu de données
+dim(climat)
+```
+
+```{r data clean}
+# Recuperer variables avec plus de 10% de NA pour les enlever
+idx_bad_col <- which(apply(climat,2,function(x){sum(is.na(x))})> (dim(climat)[1]/10))
+# et les variables avec variance trop faible, probleme pour l'acp sinon
+near_zero_var <- nzv(climat, freqCut = 95/5)
+# et les enlever
+climat_rm_na <- climat[,-c(idx_bad_col,near_zero_var)]
+# Sélection des variables numériques pour PCA
+climat_rm_na <- climat_rm_na %>% select_if(is_numeric)
+```
+
+58 individus et 57 variables.
+
+## Matrice de corélation : 
+
+```{r}
+# Construction de la matrice de corrélation
+cormat <-  cor(climat_rm_na) %>% 
+  round(2)
+# Function
+# Get upper triangle of the correlation matrix
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+
+reorder_cormat <- function(cormat){
+  # Use correlation between variables as distance
+  dd <- as.dist((1-cormat)/2)
+  hc <- hclust(dd)
+  cormat <-cormat[hc$order, hc$order]
+}
+
+cormat[which(is.na(cormat))] <- 0
+cormat <- reorder_cormat(cormat)
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal() + # minimal theme
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1)) +
+  coord_fixed()
+# Print the heatmap
+ggheatmap
+```
+
+La matrice de corrélation révèle de nombreuses corrélations entre nos variables que l'ont peut repérer et éliminer grâce à la fonction `findCorrelation()`:
+
+```{r data clean1}
+# Annotation des variables fortement corrélées
+idx_corVar = findCorrelation(cormat, cutoff = 0.5, verbose = FALSE, names = FALSE, exact = T)
+```
+
+On cherche maintenant à imputer les valeurs manquantes de notre jeu de données. Pour cela nous avons décidé d'utiliser le package `missMDA` qui a été spécifiquement implémenté pour imputer les données manquante en vue d'effectuer une analyse par ACP. Il nous faut tout d'abord estimer le nombre de composantes requises par la fonction `imputePCA` qui est la fonction permettan d'imputer ensuite les données par ACP itérative, avec le nombre de composantes optimal identifié par la fonction `estim_ncpPCA`.
+
+```{r data imputation}
+# Elimination des variables annotées
+preproc <- climat_rm_na[,-idx_corVar]
+# Estimation du nombre de
+nb <- estim_ncpPCA(preproc,scale=T)
+preproc_impute <- imputePCA(preproc,ncp=nb$ncp,scale=T)$completeObs
+```
+
+### Exploration :
+
+Dans un premier temps, nous effectuons une PCA exploratoire afin de découvrir les éventuels leviers que pourraient présenter certains individus et/ou variables.
+
+```{r Explo1}
+# 1ère PCA
+res_pca1 <- PCA(preproc_impute, ncp = dim(preproc_impute)[2], scale.unit = TRUE, graph=F)
+#Affichage des valeurs propres pour sélection du nombre de composantes
+res_pca1$eig
+# Diagramme des contributions des individus
+fviz_contrib(res_pca_vire,axes=c(1:7),choice="ind")
+# Diagramme des contributions des variables
+fviz_contrib(res_pca_vire,axes=c(1:7),choice="var")
+contrib_ind <-fviz_contrib(res_pca_vire,axes=c(1:7),choice="ind")
+```
+
+Nous récupérons 90% de la variance à partir de 7 composantes. Sur ces 7 composante nous décidons d'ignorer l'individu contribuant à plus de 10% pour la totalite des ces axes (Dumont d'Urville).
+
+```{r Explo2}
+# Marquage des individus contribuant fortement
+ind_high_contrib <- rownames(contrib_ind$data[contrib_ind$data$contrib>10,])
+# 2e ACP moins les individus à forte contribution
+res_pca2 <- PCA(preproc_impute, ncp = dim(preproc_impute)[2], scale.unit = TRUE, graph=F,ind.sup=which(rownames(preproc_impute) %in% ind_high_contrib))
+fviz_pca_biplot(res_pca2,axes=c(1,2),repel = T)
+fviz_contrib(res_pca2,axes=c(1:7),choice="ind")
+fviz_contrib(res_pca2,axes=c(1:7),choice="var")
+# HCPC pour obtenir clusters à partir la PCA
+res.hcpc <- HCPC(res_pca2, graph = FALSE)
+fviz_dend(res.hcpc, 
+          cex = 0.7,                     # Taille du text
+          palette = "jco",               # Palette de couleur ?ggpubr::ggpar
+          rect = TRUE, rect_fill = TRUE, # Rectangle autour des groupes
+          rect_border = "jco",           # Couleur du rectangle
+          labels_track_height = 0.8      # Augment l'espace pour le texte
+)
+fviz_cluster(res.hcpc,
+             repel = TRUE,            # Evite le chevauchement des textes
+             show.clust.cent = TRUE, # Montre le centre des clusters
+             palette = "jco",         # Palette de couleurs, voir ?ggpubr::ggpar
+             ggtheme = theme_minimal(),
+             main = "Factor map"
+)
+```
+
+### Prédiction par PCR, PLSR et RandomForest
+
+Tout d'abord, il conviendra de suivre le même cheminement que pour l'analyse exploratoire, toutefois en se restreignant au jeu d'apprentissage
+.
+```{r reload prediction}
+# Re-chargement des données
+climat <- fread("Données/climat.201708.csv",data.table = F)
+villes <- fread("Données/postesSynop.csv",data.table=F)
+climat <- merge(climat,villes,by="NUM_POSTE",all.x = T)
+climat$Nom[is.na(climat$Nom)] <- "Nom Inconnu"
+row.names(climat) <- climat$Nom
+climat <- climat[-which(is.na(climat$FXAB)),]
+# Récupération des index et du nom des villes du jeu de test
+idx_test <- c(7110,7149,7222,7481,7535,7591,7630,7747,7790)
+test_villes <- rownames(climat)[climat$NUM_POSTE %in% idx_test]
+# Création du jeu d'apprentissage et du jeu de test
+training <- climat[-which(climat$NUM_POSTE %in% idx_test),-which(colnames(climat) %in% c("NUM_POSTE","FXAB"))]
+test <- climat[climat$NUM_POSTE %in% idx_test,-which(colnames(climat) %in% c("NUM_POSTE","FXAB"))]
+```
+
+```{r clean prediction}
+# Sélection des variables numérique
+training <- training %>% select_if(is.numeric)
+# Elimination des variables contenant plus de 5% de NA
+idx_bad_col <- which(apply(training,2,function(x){sum(is.na(x))})> (dim(training)[1]/20))
+training <- training[,-idx_bad_col]
+# Création d'un modèle de preprocessing: imputation des NA et élimination des variables à très faible variance
+set.seed(123)
+training_bagImpute <- preProcess(training,method=c("bagImpute","nzv"))
+training <- predict(training_bagImpute,training)
+test <- test[,which(colnames(test) %in% colnames(training))]
+test <- predict(training_bagImpute,test)
+```
+
+```{r PCR, ACP explo}
+# On effectue une 1ère ACP sur notre jeu d'apprentissage nettoyé
+res_pca_explo <- PCA(training, ncp = dim(training)[2], scale.unit = TRUE, graph=F)
+res_pca_explo$eig
+# 8 composantes pour 95% de la variance
+contrib_explo <- fviz_contrib(res_pca_explo,axes=c(1:8),choice="ind")
+contrib_explo
+high_contrib_names <- as.character(contrib_explo$data$name[contrib_explo$data$contrib > 2])
+```
+
+```{r PCR, ACP final}
+# Création d'un jeu d'entrainement pour l'ACP ingorant les individus à forte contribution sur la totalité des axes 1 à 8
+training_pca <- training[-which(rownames(training) %in% high_contrib_names),]
+# ACP sur le jeu d'apprentissage
+res_pca <- PCA(training_pca, ncp = dim(training_pca)[2], scale.unit = TRUE, graph=F)
+fviz_pca_biplot(res_pca,axes=c(1,2),repel = T,col.ind = training_pca$Latitude)
+res_hcpc <- HCPC(res_pca, graph = F)
+fviz_dend(res_hcpc, 
+          cex = 0.7,                     # Taille du text
+          palette = "jco",               # Palette de couleur ?ggpubr::ggpar
+          rect = TRUE, rect_fill = TRUE, # Rectangle autour des groupes
+          rect_border = "jco",           # Couleur du rectangle
+          labels_track_height = 3      # Augment l'espace pour le texte
+)
+```
+
+L'ACP effectuée sur notre jeu de données d'apprentissage permet d'observer 3 clusters distincts. Un cluster Nord de la France, un cluster Sud de la France et un cluster Océan Indien.
+
+```{r Projection sur les axes ACP}
+# Récupération de la matrice des composantes du jeu d'apprentissage
+train_proj <- as.data.frame(res_pca$ind$coord)
+# Standardisation du jeu de test avec les statistiques du jeu d'apprentissage
+test_standard <- t(apply(test,1,function(x){(x-res_pca$call$centre)/res_pca$call$ecart.type} ))
+# Projection du jeu de test standardisé sur les composantes identifiées par ACP sur le jeu d'apprentissage
+test_proj <- as.data.frame(as.matrix(test_standard) %*% res_pca$svd$V)
+# Récupération de la variable FXAB pour création du modèle et évaluation des prédictions sur le jeu de test plus tard
+train_proj$FXAB<- climat$FXAB[which(rownames(climat) %in% rownames(train_proj))]
+test_proj$FXAB <- climat$FXAB[which(rownames(climat) %in% rownames(test_proj))]
+# Formattage nécessaire
+colnames(test_proj) <- colnames(train_proj)
+```
+
+```{r Création du modèle PCR}
+set.seed(123)
+pcr_fit <- pcr(FXAB ~ ., data = train_proj, scale = F, validation = "CV")
+par(mfrow=c(1,1))
+# Plot de la variation de la RMSE en fonction du nombre de composantes sélectionnées par le modèle PCR
+plot(RMSEP(pcr_fit), legendpos = "topleft")
+# Récupération du nombre optimal de composantes obtenu par cross-validation
+ncomp.min <- which.min(sapply(1:dim(pcr_fit$validation$pred)[3],function(x){
+  RMSE(pcr_fit$validation$pred[,,x],train_proj$FXAB)
+}))
+set.seed(123)
+pcr_fit <- pcr(FXAB ~ ., data = train_proj,ncomp=ncomp.min, scale = F, validation = "CV")
+```
+
+```{r Prédiction PCR}
+pred_pcr <- predict(pcr_fit, ncp = ncomp.min, newdata = test_proj) %>% as.data.frame %>% pull()
+rmse_pcr <- RMSE(pred_pcr,test_proj$FXAB)
+as.data.frame(pred_pcr) %>% cbind(., measured = test_proj$FXAB) %>%
+  ggplot(mapping = aes(x = measured, y = pred_pcr)) +
+    geom_point() +
+    geom_abline(mapping = aes(slope=1, intercept=1), color='red', linetype=2) +
+    theme_bw() +
+    labs(title = "Valeurs prédites en fonctions des valeurs observées (PCR)", subtitle = paste("RMSE:",round(rmse_pcr,2)),x="Observations",y="Prédictions")
+```
+
+```{r Création du modèle PLSR}
+set.seed(123)
+plsr_fit <- plsr(FXAB ~ ., data = train_proj, scale = F, validation = "CV")
+par(mfrow=c(1,1))
+# Plot de la variation de la RMSE en fonction du nombre de composantes sélectionnées par le modèle PLSR
+plot(RMSEP(plsr_fit), legendpos = "topleft")
+# Récupération du nombre optimal de composantes obtenu par cross-validation
+ncomp.min <- which.min(sapply(1:dim(plsr_fit$validation$pred)[3],function(x){
+  RMSE(plsr_fit$validation$pred[,,x],train_proj$FXAB)
+}))
+set.seed(123)
+plsr_fit <- plsr(FXAB ~ ., data = train_proj,ncomp=ncomp.min, scale = F, validation = "CV")
+```
+
+```{r Prédiction PLSR}
+pred_plsr <- predict(plsr_fit, ncp = ncomp.min, newdata = test_proj) %>% as.data.frame %>% pull()
+rmse_plsr <- RMSE(pred_plsr,test_proj$FXAB)
+as.data.frame(pred_plsr) %>% cbind(., measured = test_proj$FXAB) %>%
+  ggplot(mapping = aes(x = measured, y = pred_plsr)) +
+    geom_point() +
+    geom_abline(mapping = aes(slope=1, intercept=1), color='red', linetype=2) +
+    theme_bw() +
+    labs(title = "Valeurs prédites en fonctions des valeurs observées (PLSR)", subtitle = paste("RMSE:",round(rmse_plsr,2)),x="Observations",y="Prédictions")
+```
+
+```{r randomForest sur Jeu de départ}
+training_rf <- training[-which(rownames(training) %in% high_contrib_names),]
+training_rf$FXAB <- climat$FXAB[which(rownames(climat) %in% rownames(training_rf))]
+test_rf <- test
+test_rf$FXAB <- climat$FXAB[which(rownames(climat) %in% rownames(test_rf))]
+set.seed(123)
+ctrl = trainControl(method = "repeatedcv",number=3,repeats=10)
+mod_ranger <- train(FXAB~., data=training_rf, method="ranger")
+mod_svm <- train(FXAB~., data=training_rf, method="svmLinear2")
+mod_glmnet <- train(FXAB~., data=training_rf, method="glmnet")
+RMSE(predict(mod_ranger,test_rf),test_rf$FXAB)
+RMSE(predict(mod_svm,test_rf),test_rf$FXAB)
+RMSE(predict(mod_glmnet,test_rf),test_rf$FXAB)
+```
+
+
+
